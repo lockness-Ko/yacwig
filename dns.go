@@ -10,17 +10,16 @@ import (
 
 var serv server
 
-func parseQuery(m *dns.Msg) {
+func parseQuery(m *dns.Msg, ip string) {
 	// parse query
 	for _, q := range m.Question {
 		// check if query is in records
 		switch q.Qtype {
 		// A record
 		case dns.TypeA:
-			log.Printf("Query for %s\n", q.Name)
-			incoming(q.Name)
+			// log.Printf("Query for %s\n", q.Name)
 			// IP from records
-			ip := incoming(q.Name)
+			ip := incoming(q.Name, ip)
 			for _, i := range ip {
 				rr, _ := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, i))
 				m.Answer = append(m.Answer, rr)
@@ -37,7 +36,7 @@ func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 	switch r.Opcode {
 	case dns.OpcodeQuery:
-		parseQuery(m)
+		parseQuery(m, w.RemoteAddr().String())
 	}
 
 	w.WriteMsg(m)
