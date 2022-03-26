@@ -43,7 +43,7 @@ func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
 
 func DNS(port int) {
 	// attach request handler func
-	dns.HandleFunc("com.", handleDnsRequest)
+	dns.HandleFunc(".", handleDnsRequest)
 
 	// start server
 	server := &dns.Server{Addr: ":" + strconv.Itoa(port), Net: "udp"}
