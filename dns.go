@@ -8,6 +8,8 @@ import (
 	"github.com/miekg/dns"
 )
 
+var serv server
+
 func parseQuery(m *dns.Msg) {
 	// parse query
 	for _, q := range m.Question {
@@ -41,7 +43,8 @@ func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
 	w.WriteMsg(m)
 }
 
-func DNS(port int) {
+func DNS(port int, serv server) {
+
 	// attach request handler func
 	dns.HandleFunc(".", handleDnsRequest)
 

