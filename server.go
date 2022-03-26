@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -39,8 +40,27 @@ func ipencode(str string) []string {
 	return ips
 }
 
+func ipdecode(ips []string) string {
+	// Join the lines with a .
+	todecode := strings.Join(ips, ".")
+	// Split the IPs by .
+	ascii_character := strings.Split(todecode, ".")
+	// Convert each ascii to a char
+	chars := make([]string, len(ascii_character))
+	for i, ascii := range ascii_character {
+		chars[i] = string(func(a int, _ error) int { return a }(strconv.Atoi(ascii)))
+	}
+	// Join the chars
+	return strings.Join(chars, "")
+}
+
 func incoming(query string) []string {
-	return ipencode(fmt.Sprintf("Hello %s, How are you?", strings.Split(query, ".")[0]))
+	query = strings.Split(query, ".")[0]
+	switch query {
+	case "ping":
+		return ipencode("fingerprint")
+	}
+	return ipencode(fmt.Sprintf("Hello %s, How are you?", query))
 }
 
 func Serve(port int) server {

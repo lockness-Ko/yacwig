@@ -5,6 +5,9 @@
 *.so
 *.dylib
 
+# remove wordlist backup
+.*.txt
+
 # Test binary, built with `go test -c`
 *.test
 

